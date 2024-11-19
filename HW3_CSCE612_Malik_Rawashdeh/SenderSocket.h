@@ -53,6 +53,9 @@ private:
 	int effective_window_size;
 
 	Packet* pending_pkts;
+	Packet* get_packet(DWORD seq) {
+		return &pending_pkts[seq % W];
+	}
 	// next seq number
 	DWORD next_seq;
 	DWORD send_base; // first packet in the window
@@ -67,15 +70,13 @@ private:
 
 	thread stats_thread;
 	thread worker_thread;
+	thread worker2_thread;
 
 	void calculate_rto(clock_t sample_start) {
 		// calculated in ms
+		// alpha = 0.125 (1/8), beta = 0.25 (1/4) from slides 
 		int sample_rtt = (float)(clock() - sample_start) / CLOCKS_PER_SEC * 1000;
-		// printf("sample rtt %d\n", sample_rtt);
-		// rto = estRTT + 4*devRTT
-		// estRTT = 0.875*estRTT + 0.125*sampleRTT where alpha = 0.125
-		// devRTT = 0.75*devRTT + 0.25*|sampleRTT - estRTT| where beta = 0.25
-		// prevent devrtt frinm going below 10 ms
+
 		estimated_rtt = 0.875 * estimated_rtt + 0.125 * sample_rtt;
 		dev_rtt = 0.75 * dev_rtt + 0.25 * abs(sample_rtt - estimated_rtt);
 		rto = estimated_rtt + 4 * max(dev_rtt, 10);
@@ -84,6 +85,7 @@ private:
 
 
 	void WorkerRun();
+	void Worker2Run();
 	void StatsRun();
 
 	bool has_pending_pkts() {

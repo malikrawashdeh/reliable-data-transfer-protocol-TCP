@@ -5,6 +5,7 @@
 #define RETURN_PATH 1
 #define MAGIC_PROTOCOL 0x8311AA 
 #define MAX_PKT_SIZE (1500-28) // maximum UDP packet size accepted by receiver
+// this is in byutes not bits
 
 
 #pragma once 

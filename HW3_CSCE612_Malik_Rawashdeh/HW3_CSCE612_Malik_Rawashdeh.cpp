@@ -44,19 +44,19 @@ int main(int argc, char* argv[])
 
 
 
-	// Main: sender W = 10, RTT 0.200 sec, loss 1e-05 / 0.0001, link 100 Mbps
+	
 	printf("Main: sender W = %d, RTT %.3f sec, loss %g / %g, link %.0f Mbps\n",
 		sender_window, round_trip_propogation_delay, prob_loss_forward, prob_loss_return, link_bottle_neck);
 
 	// need unique 
 
-	// Main: initializing DWORD array with 2^20 elements... done in 0 ms 
+	
 	printf("Main: initializing DWORD array with 2^%d elements... ", pow_buffer_size);
 
 	clock_t start = clock();
 	// uint 64 buffer size
 	UINT64 dword_buff_size = 1 << pow_buffer_size;
-	DWORD* dword_buff = new DWORD[dword_buff_size]; // user requested buffer 
+	DWORD* dword_buff = new DWORD[dword_buff_size]; 
 	for (UINT64 i = 0; i < dword_buff_size; i++) {
 		dword_buff[i] = i; // required initialization
 	}
@@ -96,7 +96,6 @@ int main(int argc, char* argv[])
 		// decide the size of the next packet
 		int bytes = min(byte_buff_size - off, MAX_PKT_SIZE - sizeof(SenderDataHeader));
 
-		// send the packet
 		int send_status = ss.Send(char_buff + off, bytes);
 		// printf("Main: sent packet %d\n", cnt++);
 		if (send_status != STATUS_OK) {
@@ -104,7 +103,9 @@ int main(int argc, char* argv[])
 			return 1;
 		}
 		off += bytes;
+		cnt += 1;
 	}
+	// printf("Main: sent %d packets\n", cnt);
 
 
 
@@ -117,7 +118,7 @@ int main(int argc, char* argv[])
 	}
 
 
-	// Main: transfer finished in 0.010 sec 
+	
 	float transfer_time = (float)(end_send_time - start_transfer_time) / CLOCKS_PER_SEC;
 	// rate of send in Kbps
 	float rate = (float)(byte_buff_size * 8) / transfer_time / 1000;

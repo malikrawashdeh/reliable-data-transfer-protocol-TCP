@@ -460,6 +460,8 @@ int SenderSocket::Send(char* buf, int bytes)
 	return last_status;
 }
 
+
+
 void SenderSocket::WorkerRun() {
 	// printf("WorkerRun: entered\n");
 
@@ -588,7 +590,7 @@ void SenderSocket::WorkerRun() {
 
 					// flow control
 					effective_window_size = min(W, rh.recvWnd);
-
+					// printf("effective_window_size = %d\n", rh.recvWnd);
 					// how much we can advance the semephore
 					int new_released = send_base + effective_window_size - last_released;
 
@@ -622,7 +624,7 @@ void SenderSocket::WorkerRun() {
 			// get the packet to send
 			p = pending_pkts + nxt_send_seq % W;
 
-			
+
 
 			// start the timer for rtt 
 			sample_start = clock();
@@ -650,4 +652,6 @@ void SenderSocket::WorkerRun() {
 
 	return;
 }
+
+
 
