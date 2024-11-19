@@ -36,9 +36,13 @@ SenderSocket::~SenderSocket()
 	if (worker_thread.joinable()) {
 		worker_thread.join();
 	}
+	if (worker2_thread.joinable()) {
+		worker2_thread.join();
+	}
 	if (stats_thread.joinable()) {
 		stats_thread.join();
 	}
+
 
 	// best practice 
 	if (sock != INVALID_SOCKET) {
@@ -246,6 +250,8 @@ int SenderSocket::Open(const char* target_host, int port, int sender_window, Lin
 	// last_recv is the number of empty slots you can send 
 	empty = CreateSemaphore(NULL, effective_window_size, W, NULL);
 	full = CreateSemaphore(NULL, 0, W, NULL);
+	// edge case single packet 
+	single_pkt_case = CreateEvent(NULL, false, false, NULL);
 	if (empty == NULL || full == NULL) {
 		return FAILED_SEND;
 	}
@@ -259,8 +265,9 @@ int SenderSocket::Open(const char* target_host, int port, int sender_window, Lin
 
 
 
-	// create the worker thread
+	// create the worker threads
 	worker_thread = thread(&SenderSocket::WorkerRun, this);
+	worker2_thread = thread(&SenderSocket::Worker2Run, this);
 
 	return STATUS_OK;
 }
@@ -281,6 +288,9 @@ int SenderSocket::Close(clock_t& end_send_time)
 	// wait for the worker thread to finish
 	if (worker_thread.joinable()) {
 		worker_thread.join();
+	}
+	if (worker2_thread.joinable()) {
+		worker2_thread.join();
 	}
 	// wait for the stats thread to finish
 	if (stats_thread.joinable()) {
@@ -498,7 +508,7 @@ void SenderSocket::WorkerRun() {
 
 	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 
-	HANDLE events[] = { socket_receive_ready, full, event_quit };
+	HANDLE events[] = { socket_receive_ready, single_pkt_case, event_quit };
 	// time the rtt of send_base
 	clock_t sample_start = 0;
 	int num_retries = 0;
@@ -525,7 +535,7 @@ void SenderSocket::WorkerRun() {
 		//printf("WorkerRun: ret = %d\n", ret);
 		switch (ret) {
 			// case timeout
-		case WAIT_TIMEOUT:
+		case WAIT_TIMEOUT: {
 			//printf("[%.3f] --> timeout; rto = %d; send_base = %d; next_send_seq = %d\n",
 			//	(float)(clock() - constructor_start) / CLOCKS_PER_SEC, rto, send_base, nxt_send_seq);
 			cnt_timeouts++;
@@ -545,9 +555,16 @@ void SenderSocket::WorkerRun() {
 			// send p->pkt
 			sample_start = clock();
 			num_retx++;
-			sendto(sock, p->pkt, p->size, 0, (struct sockaddr*)&target_addr, sizeof(target_addr));
+			int s_res = sendto(sock, p->pkt, p->size, 0, (struct sockaddr*)&target_addr, sizeof(target_addr));
+			if (s_res == SOCKET_ERROR) {
+
+				SetEvent(event_quit);
+				last_status = FAILED_SEND;
+				return;
+			}
 			break;
-			// case socket
+		}
+						 // case socket
 		case WAIT_OBJECT_0: // socket event 
 		{
 			// printf("WorkerRun: socket event\n");
@@ -573,7 +590,7 @@ void SenderSocket::WorkerRun() {
 					// reset dup ack
 					dup_ack = 0;
 
-					// update send_base
+					// update send_base since cumulative ackno
 					send_base = rh.ackSeq;
 
 					// update rt0
@@ -609,7 +626,12 @@ void SenderSocket::WorkerRun() {
 						sample_start = clock();
 						reset = true;
 						num_retx++;
-						sendto(sock, p->pkt, p->size, 0, (struct sockaddr*)&target_addr, sizeof(target_addr));
+						int s_res = sendto(sock, p->pkt, p->size, 0, (struct sockaddr*)&target_addr, sizeof(target_addr));
+						if (s_res == SOCKET_ERROR) {
+							SetEvent(event_quit);
+							last_status = FAILED_SEND;
+							return;
+						}
 
 						//dup_ack = 0;
 					}
@@ -619,22 +641,12 @@ void SenderSocket::WorkerRun() {
 			}
 			break;
 		}
-		// case sender
 		case WAIT_OBJECT_0 + 1:
-			// get the packet to send
-			p = pending_pkts + nxt_send_seq % W;
-
-
-
-			// start the timer for rtt 
-			sample_start = clock();
-			p->txTime = clock();
-
-			sendto(sock, p->pkt, p->size, 0, (struct sockaddr*)&target_addr, sizeof(target_addr));
-			nxt_send_seq++;
+			// do nothing 
 			break;
+			// case quit
+		case WAIT_OBJECT_0 + 2:
 
-		case WAIT_OBJECT_0 + 2: // quit
 			// printf("WorkerRun: exiting\n");
 			return;
 		default: // handle failed wait
@@ -655,3 +667,34 @@ void SenderSocket::WorkerRun() {
 
 
 
+void SenderSocket::Worker2Run() {
+	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+
+	HANDLE events[] = { full, event_quit };
+
+	while (true) {
+
+		int ret = WaitForMultipleObjects(2, events, false, INFINITE);
+
+		if (ret == WAIT_OBJECT_0) {
+			// get the packet to send
+			Packet* p = pending_pkts + nxt_send_seq % W;
+
+			// start the timer for rtt 
+			clock_t sample_start = clock();
+			p->txTime = clock();
+
+			int s_res = sendto(sock, p->pkt, p->size, 0, (struct sockaddr*)&target_addr, sizeof(target_addr));
+			if (s_res == SOCKET_ERROR) {
+				SetEvent(event_quit); // quit gracful
+				last_status = FAILED_SEND;
+				return;
+			}
+			SetEvent(single_pkt_case);
+			nxt_send_seq++;
+		}
+		else if (ret == WAIT_OBJECT_0 + 1) { // quit 
+			return;
+		}
+	}
+}

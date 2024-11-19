@@ -66,6 +66,7 @@ private:
 	HANDLE empty;
 	HANDLE full;
 	HANDLE event_quit;
+	HANDLE single_pkt_case;
 	HANDLE socket_receive_ready;
 
 	thread stats_thread;
