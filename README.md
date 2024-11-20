@@ -70,7 +70,7 @@ Main: transfer finished in 28.626 sec, 37509.93 Kbps, checksum FC6FB7CB
    ```bash
    git clone https://github.com/malikrawashdeh/reliable-data-transfer-protocol-TCP/
    cd reliable-data-transfer-protocol-TCP
-```
+    ```
 1. Build the project using Visual Studio for best experience
 
 ## Performance Metrics
