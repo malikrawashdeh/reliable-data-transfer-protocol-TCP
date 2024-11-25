@@ -32,6 +32,8 @@ The implementation also features two additional threads:
 - **Flow Control and Congestion Management**:
   - Adapts the sender's window size based on receiver feedback.
   - Supports pipelined transmission for high throughput.
+- **Event Loop for efficient non-blocking operations**:
+  - Used an event loop for non-blocking recv operations
 
 ## Usage
 
